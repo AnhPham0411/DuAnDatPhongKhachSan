@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+  USER
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime? // Bổ sung cho NextAuth
+  image         String?   // Bổ sung Avatar
+  password      String?
+  phone         String?
+  role          UserRole  @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  bookings      Booking[]
+  reviews       Review[]
+  accounts      Account[] // Bổ sung quan hệ
+}
+
+// Bảng Account bắt buộc cho NextAuth (Google/Facebook login)
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String? @db.Text
+  access_token       String? @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String? @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model RoomType {
+  id          String    @id @default(cuid())
+  name        String
+  description String?   @db.Text
+  basePrice   Decimal   @db.Decimal(10, 2)
+  capacity    Int
+  rooms       Room[]
+  amenities   Amenity[]
+}
+
+model Room {
+  id             String          @id @default(cuid())
+  name           String
+  roomTypeId     String
+  isAvailable    Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  roomType       RoomType        @relation(fields: [roomTypeId], references: [id])
+  bookings       Booking[]
+  images         RoomImage[]
+  seasonalPrices SeasonalPrice[]
+
+  @@index([roomTypeId])
+}
+
+model RoomImage {
+  id      String  @id @default(cuid())
+  url     String
+  altText String? // Bổ sung cho SEO
+  roomId  String
+  room    Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+}
+
+model Amenity {
+  id        String     @id @default(cuid())
+  name      String
+  icon      String?
+  roomTypes RoomType[]
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  userId        String
+  roomId        String
+  checkIn       DateTime
+  checkOut      DateTime
+  totalPrice    Decimal       @db.Decimal(10, 2)
+  status        BookingStatus @default(PENDING)
+  paymentStatus PaymentStatus @default(UNPAID)
+  note          String?
+  
+  // Thông tin Snapshot (Lưu cứng thông tin khách lúc đặt)
+  guestName     String?
+  guestEmail    String?
+  guestPhone    String?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  user          User          @relation(fields: [userId], references: [id])
+  room          Room          @relation(fields: [roomId], references: [id])
+  payment       Payment?
+  review        Review?
+
+  @@index([roomId, checkIn, checkOut])
+  @@index([userId])
+}
+
+model SeasonalPrice {
+  id        String   @id @default(cuid())
+  roomId    String
+  startDate DateTime
+  endDate   DateTime
+  price     Decimal  @db.Decimal(10, 2)
+  room      Room     @relation(fields: [roomId], references: [id])
+
+  @@index([roomId])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  rating    Int
+  comment   String?  @db.Text
+  userId    String
+  bookingId String   @unique
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+
+  @@index([userId])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  bookingId       String        @unique
+  amount          Decimal       @db.Decimal(10, 2)
+  provider        String
+  transactionCode String?
+  paymentDate     DateTime      @default(now())
+  status          PaymentStatus @default(UNPAID) // Bổ sung status cho Payment để tracking riêng
+  booking         Booking       @relation(fields: [bookingId], references: [id])
+}
