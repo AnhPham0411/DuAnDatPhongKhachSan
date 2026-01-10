@@ -1,11 +1,12 @@
-import { User, Room, RoomType, RoomImage } from "@prisma/client";
+import { Room, RoomImage, RoomType, Amenity } from "@prisma/client";
 
-// Chúng ta thay thế kiểu Decimal gốc của Prisma bằng number
-export type RoomWithDetails = Room & {
-  images: RoomImage[];
+// SafeRoom: Loại bỏ các trường không tồn tại hoặc không an toàn
+export type SafeRoom = Omit<Room, "createdAt"> & {
+  createdAt: string;
+  // updatedAt: string;  <-- XÓA DÒNG NÀY (Vì bảng Room không có cột này)
   roomType: Omit<RoomType, "basePrice"> & {
-    basePrice: number; // Đổi từ Decimal sang number
+    basePrice: number;
+    amenities: Amenity[];
   };
+  images: RoomImage[];
 };
-
-export type SafeUser = Omit<User, "password">;

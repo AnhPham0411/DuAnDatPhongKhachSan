@@ -1,34 +1,20 @@
-import { getAmenities } from "@/actions/get-data";
-import { createAmenity, deleteAmenity } from "@/actions/mutations";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Trash2, Plus } from "lucide-react";
+import { db } from "@/lib/db";
+import {AmenityClient} from "@/components/admin/amenity-client"; // Handles Create/Delete interactions
 
 export default async function AmenitiesPage() {
-  const amenities = await getAmenities();
+  const amenities = await db.amenity.findMany({
+    orderBy: { name: "asc" },
+  });
 
   return (
-    <div className="p-8 space-y-8">
-      <h1 className="text-3xl font-bold">Quản lý Tiện nghi</h1>
+    <div className="space-y-6 max-w-4xl">
+      <div>
+        <h1 className="text-2xl font-bold">Tiện nghi khách sạn</h1>
+        <p className="text-gray-500">Quản lý các tiện ích (Wifi, TV, Bể bơi...)</p>
+      </div>
       
-      <div className="bg-white p-6 rounded-lg shadow-sm border max-w-lg">
-        <form action={createAmenity} className="flex gap-2">
-          <Input name="name" placeholder="Tên tiện nghi (Wifi, BBQ...)" required />
-          <Button type="submit"><Plus className="w-4 h-4 mr-2" /> Thêm</Button>
-        </form>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {amenities.map((item) => (
-          <div key={item.id} className="flex items-center justify-between p-4 bg-white border rounded-lg">
-            <span>{item.name}</span>
-            <form action={deleteAmenity.bind(null, item.id)}>
-              <Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
-            </form>
-          </div>
-        ))}
-      </div>
+      {/* Client component to handle Add/Delete without page reload */}
+      <AmenityClient initialData={amenities} />
     </div>
   );
 }
-

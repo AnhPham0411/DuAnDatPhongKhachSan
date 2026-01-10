@@ -1,123 +1,171 @@
-import { getBookings } from "@/actions/get-data";
-import { updateBookingStatus } from "@/actions/mutations";
+import { db } from "@/lib/db";
 import { format } from "date-fns";
-import { vi } from "date-fns/locale";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge"; // Nếu chưa có Badge, dùng span với class tailwind
-import { CheckCircle2, XCircle, LogIn, LogOut } from "lucide-react";
+import { BookingActions } from "@/components/admin/booking-actions";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CalendarDays, DollarSign, User } from "lucide-react";
 
-// Hàm helper để render màu trạng thái
+// --- Helpers ---
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(amount);
+};
+
 const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "PENDING": return <span className="px-2 py-1 rounded bg-yellow-100 text-yellow-800 text-xs font-bold">Chờ duyệt</span>;
-    case "CONFIRMED": return <span className="px-2 py-1 rounded bg-blue-100 text-blue-800 text-xs font-bold">Đã cọc</span>;
-    case "CHECKED_IN": return <span className="px-2 py-1 rounded bg-green-100 text-green-800 text-xs font-bold">Đang ở</span>;
-    case "CHECKED_OUT": return <span className="px-2 py-1 rounded bg-gray-100 text-gray-800 text-xs font-bold">Đã trả phòng</span>;
-    case "CANCELLED": return <span className="px-2 py-1 rounded bg-red-100 text-red-800 text-xs font-bold">Đã hủy</span>;
-    default: return status;
-  }
+  const styles: Record<string, string> = {
+    PENDING: "bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-yellow-200",
+    CONFIRMED: "bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200",
+    CHECKED_IN: "bg-green-100 text-green-800 hover:bg-green-200 border-green-200",
+    CHECKED_OUT: "bg-gray-100 text-gray-800 hover:bg-gray-200 border-gray-200",
+    CANCELLED: "bg-red-100 text-red-800 hover:bg-red-200 border-red-200",
+  };
+  
+  const labels: Record<string, string> = {
+    PENDING: "Chờ duyệt",
+    CONFIRMED: "Đã xác nhận",
+    CHECKED_IN: "Đang ở",
+    CHECKED_OUT: "Đã trả phòng",
+    CANCELLED: "Đã hủy",
+  };
+
+  return (
+    <Badge variant="outline" className={`border ${styles[status] || ""}`}>
+      {labels[status] || status}
+    </Badge>
+  );
+};
+
+const getPaymentBadge = (status: string) => {
+    const styles: Record<string, string> = {
+        PAID: "bg-emerald-500 hover:bg-emerald-600 border-transparent text-white",
+        UNPAID: "bg-orange-500 hover:bg-orange-600 border-transparent text-white",
+        REFUNDED: "bg-slate-500 hover:bg-slate-600 border-transparent text-white",
+    };
+    return (
+        <Badge className={`shadow-none ${styles[status]}`}>
+            {status === "PAID" ? "Đã TT" : status === "UNPAID" ? "Chưa TT" : "Hoàn tiền"}
+        </Badge>
+    );
 };
 
 export default async function BookingsPage() {
-  const bookings = await getBookings();
+  const bookings = await db.booking.findMany({
+    include: {
+      user: { select: { name: true, email: true } },
+      room: { select: { name: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Quản lý Đặt phòng</h1>
-        <div className="text-sm text-gray-500">Tổng: {bookings.length} đơn</div>
+    <div className="flex-1 space-y-8 p-8 pt-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Đơn đặt phòng</h2>
+          <p className="text-muted-foreground">
+            Quản lý check-in, check-out và thanh toán.
+          </p>
+        </div>
       </div>
 
-      <div className="border rounded-lg bg-white shadow overflow-hidden">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-gray-50 text-gray-700 uppercase font-medium">
-            <tr>
-              <th className="px-6 py-4">Mã đơn / Khách</th>
-              <th className="px-6 py-4">Phòng</th>
-              <th className="px-6 py-4">Thời gian</th>
-              <th className="px-6 py-4">Tổng tiền</th>
-              <th className="px-6 py-4">Trạng thái</th>
-              <th className="px-6 py-4 text-center">Hành động</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {bookings.map((item) => (
-              <tr key={item.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4">
-                  <div className="font-bold text-gray-900">#{item.id.slice(-5).toUpperCase()}</div>
-                  <div className="text-gray-500 text-xs">{item.user.name}</div>
-                  <div className="text-gray-400 text-xs">{item.user.email}</div>
-                </td>
-                <td className="px-6 py-4 font-medium text-blue-600">
-                  {item.room.name}
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-green-600">Vào: {format(item.checkIn, "dd/MM/yyyy", { locale: vi })}</span>
-                    <span className="text-red-500">Ra: {format(item.checkOut, "dd/MM/yyyy", { locale: vi })}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 font-bold">
-                  {Number(item.totalPrice).toLocaleString()} đ
-                </td>
-                <td className="px-6 py-4">
-                  {getStatusBadge(item.status)}
-                </td>
-                <td className="px-6 py-4">
-                  {/* Cụm nút hành động */}
-                  <div className="flex justify-center gap-2">
-                    {/* Nút Duyệt (Confirm) */}
-                    {item.status === "PENDING" && (
-                      <form action={updateBookingStatus}>
-                        <input type="hidden" name="bookingId" value={item.id} />
-                        <input type="hidden" name="status" value="CONFIRMED" />
-                        <Button size="sm" variant="outline" className="text-blue-600 hover:bg-blue-50" title="Xác nhận">
-                          <CheckCircle2 className="w-4 h-4" />
-                        </Button>
-                      </form>
-                    )}
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Tổng đơn hàng</CardTitle>
+            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{bookings.length}</div>
+          </CardContent>
+        </Card>
+      </div>
 
-                    {/* Nút Check-in */}
-                    {item.status === "CONFIRMED" && (
-                      <form action={updateBookingStatus}>
-                        <input type="hidden" name="bookingId" value={item.id} />
-                        <input type="hidden" name="status" value="CHECKED_IN" />
-                        <Button size="sm" variant="outline" className="text-green-600 hover:bg-green-50" title="Check-in">
-                          <LogIn className="w-4 h-4" />
-                        </Button>
-                      </form>
-                    )}
+      <div className="rounded-md border bg-white shadow-sm overflow-hidden">
+        <Table>
+          <TableHeader className="bg-slate-50">
+            <TableRow>
+              <TableHead className="w-[100px]">Mã đơn</TableHead>
+              <TableHead>Khách hàng</TableHead>
+              <TableHead>Phòng</TableHead>
+              <TableHead>Thời gian</TableHead>
+              <TableHead>Thanh toán</TableHead>
+              <TableHead className="text-right">Tổng tiền</TableHead>
+              <TableHead>Trạng thái</TableHead>
+              <TableHead className="text-right">Thao tác</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {bookings.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                  Chưa có dữ liệu đặt phòng.
+                </TableCell>
+              </TableRow>
+            ) : (
+              bookings.map((booking) => (
+                <TableRow key={booking.id} className="hover:bg-slate-50/50">
+                  <TableCell className="font-mono text-xs font-medium text-slate-500">
+                    {booking.id.slice(-6).toUpperCase()}
+                  </TableCell>
+                  
+                  <TableCell>
+                    <div className="flex flex-col">
+                        <span className="font-medium flex items-center gap-1 text-sm">
+                             <User className="h-3 w-3 text-slate-400" />
+                             {booking.guestName || booking.user.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground ml-4">
+                            {booking.guestPhone || booking.user.email}
+                        </span>
+                    </div>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <span className="font-medium text-sm">{booking.room.name}</span>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <div className="text-xs text-slate-600">
+                        <div className="font-medium">{format(booking.checkIn, "dd/MM")} → {format(booking.checkOut, "dd/MM/yyyy")}</div>
+                        {/* Tính số đêm (Optional) */}
+                        {/* <div className="text-slate-400">2 đêm</div> */}
+                    </div>
+                  </TableCell>
 
-                    {/* Nút Check-out */}
-                    {item.status === "CHECKED_IN" && (
-                      <form action={updateBookingStatus}>
-                        <input type="hidden" name="bookingId" value={item.id} />
-                        <input type="hidden" name="status" value="CHECKED_OUT" />
-                        <Button size="sm" variant="outline" className="text-purple-600 hover:bg-purple-50" title="Check-out">
-                          <LogOut className="w-4 h-4" />
-                        </Button>
-                      </form>
-                    )}
-
-                    {/* Nút Hủy */}
-                    {["PENDING", "CONFIRMED"].includes(item.status) && (
-                      <form action={updateBookingStatus}>
-                        <input type="hidden" name="bookingId" value={item.id} />
-                        <input type="hidden" name="status" value="CANCELLED" />
-                        <Button size="sm" variant="ghost" className="text-red-500 hover:bg-red-50" title="Hủy đơn">
-                          <XCircle className="w-4 h-4" />
-                        </Button>
-                      </form>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {bookings.length === 0 && (
-          <div className="p-8 text-center text-gray-500">Chưa có đơn đặt phòng nào.</div>
-        )}
+                  <TableCell>
+                     {getPaymentBadge(booking.paymentStatus)}
+                  </TableCell>
+                  
+                  <TableCell className="text-right font-bold text-slate-900">
+                    {formatCurrency(Number(booking.totalPrice))}
+                  </TableCell>
+                  
+                  <TableCell>
+                    {getStatusBadge(booking.status)}
+                  </TableCell>
+                  
+                  <TableCell className="text-right">
+                    <BookingActions 
+                        id={booking.id} 
+                        status={booking.status}
+                        paymentStatus={booking.paymentStatus}
+                        totalPrice={Number(booking.totalPrice)} 
+                        guestName={booking.guestName || booking.user?.name || "Khách hàng"}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

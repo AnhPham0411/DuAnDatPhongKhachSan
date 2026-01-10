@@ -7,6 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// --- ENUMS ---
 enum UserRole {
   ADMIN
   STAFF
@@ -27,12 +28,32 @@ enum PaymentStatus {
   REFUNDED
 }
 
+// [MỚI CHO VOUCHER] Loại giảm giá
+enum DiscountType {
+  PERCENT   // Giảm theo %
+  FIXED     // Giảm số tiền cố định (VND)
+}
+
+// --- MODELS ---
+
+model Location {
+  id          String   @id @default(cuid())
+  name        String   
+  address     String?  
+  description String?  @db.Text
+  imageUrl    String?  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roomTypes   RoomType[] 
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
   email         String    @unique
-  emailVerified DateTime? // Bổ sung cho NextAuth
-  image         String?   // Bổ sung Avatar
+  emailVerified DateTime?
+  image         String?
   password      String?
   phone         String?
   role          UserRole  @default(USER)
@@ -41,23 +62,25 @@ model User {
   
   bookings      Booking[]
   reviews       Review[]
-  accounts      Account[] // Bổ sung quan hệ
+  accounts      Account[]
+  
+  // [MỚI] Quan hệ ngược để lấy danh sách yêu thích
+  wishlists     Wishlist[] 
 }
 
-// Bảng Account bắt buộc cho NextAuth (Google/Facebook login)
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String? @db.Text
-  access_token       String? @db.Text
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String? @db.Text
-  session_state      String?
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -65,11 +88,15 @@ model Account {
 }
 
 model RoomType {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
-  description String?   @db.Text
-  basePrice   Decimal   @db.Decimal(10, 2)
+  description String?  @db.Text
+  basePrice   Decimal  @db.Decimal(10, 2)
   capacity    Int
+  
+  locationId  String
+  location    Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
   rooms       Room[]
   amenities   Amenity[]
 }
@@ -80,18 +107,22 @@ model Room {
   roomTypeId     String
   isAvailable    Boolean         @default(true)
   createdAt      DateTime        @default(now())
-  roomType       RoomType        @relation(fields: [roomTypeId], references: [id])
+  
+  roomType       RoomType        @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
   bookings       Booking[]
   images         RoomImage[]
   seasonalPrices SeasonalPrice[]
-
+  
+  // [MỚI] Quan hệ ngược với Wishlist
+  wishlists      Wishlist[]      
+  
   @@index([roomTypeId])
 }
 
 model RoomImage {
   id      String  @id @default(cuid())
   url     String
-  altText String? // Bổ sung cho SEO
+  altText String?
   roomId  String
   room    Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
@@ -105,18 +136,41 @@ model Amenity {
   roomTypes RoomType[]
 }
 
+// [MỚI] Model Voucher (Mã giảm giá) - Chức năng 3
+model Voucher {
+  id             String       @id @default(cuid())
+  code           String       @unique // Mã code (VD: SUMMER2025)
+  discountType   DiscountType // Loại giảm: % hay Tiền mặt
+  discountValue  Decimal      @db.Decimal(10, 2) // Giá trị giảm
+  minOrderValue  Decimal?     @db.Decimal(10, 2) // Đơn tối thiểu để áp dụng
+  maxDiscount    Decimal?     @db.Decimal(10, 2) // Giảm tối đa bao nhiêu (cho loại %)
+  startDate      DateTime     // Ngày bắt đầu
+  endDate        DateTime     // Ngày kết thúc
+  usageLimit     Int?         // Giới hạn số lần dùng toàn hệ thống
+  usedCount      Int          @default(0) // Số lần đã dùng
+  isActive       Boolean      @default(true)
+  
+  bookings       Booking[]    // Các đơn đã dùng mã này
+}
+
 model Booking {
   id            String        @id @default(cuid())
   userId        String
   roomId        String
   checkIn       DateTime
   checkOut      DateTime
-  totalPrice    Decimal       @db.Decimal(10, 2)
+  
+  // --- CẬP NHẬT CHO THANH TOÁN & VOUCHER ---
+  totalPrice    Decimal       @db.Decimal(10, 2) // Số tiền CUỐI CÙNG khách phải trả (sau khi trừ voucher)
+  originalPrice Decimal       @default(0) @db.Decimal(10, 2) // [MỚI] Giá gốc trước khi giảm
+  
+  voucherId     String?       // [MỚI] Mã voucher đã áp dụng (nếu có)
+  discountValue Decimal       @default(0) @db.Decimal(10, 2) // [MỚI] Số tiền đã được giảm
+  
   status        BookingStatus @default(PENDING)
   paymentStatus PaymentStatus @default(UNPAID)
   note          String?
   
-  // Thông tin Snapshot (Lưu cứng thông tin khách lúc đặt)
   guestName     String?
   guestEmail    String?
   guestPhone    String?
@@ -126,11 +180,16 @@ model Booking {
   
   user          User          @relation(fields: [userId], references: [id])
   room          Room          @relation(fields: [roomId], references: [id])
+  
+  // [MỚI] Liên kết Voucher
+  voucher       Voucher?      @relation(fields: [voucherId], references: [id])
+  
   payment       Payment?
   review        Review?
 
   @@index([roomId, checkIn, checkOut])
   @@index([userId])
+  @@index([voucherId])
 }
 
 model SeasonalPrice {
@@ -139,20 +198,22 @@ model SeasonalPrice {
   startDate DateTime
   endDate   DateTime
   price     Decimal  @db.Decimal(10, 2)
-  room      Room     @relation(fields: [roomId], references: [id])
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId])
 }
 
 model Review {
-  id        String   @id @default(cuid())
-  rating    Int
-  comment   String?  @db.Text
-  userId    String
-  bookingId String   @unique
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
-  booking   Booking  @relation(fields: [bookingId], references: [id])
+  id         String    @id @default(cuid())
+  rating     Int
+  comment    String?   @db.Text
+  adminReply String?   @db.Text 
+  repliedAt  DateTime?         
+  userId     String
+  bookingId  String    @unique
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id])
+  booking    Booking   @relation(fields: [bookingId], references: [id])
 
   @@index([userId])
 }
@@ -164,6 +225,19 @@ model Payment {
   provider        String
   transactionCode String?
   paymentDate     DateTime      @default(now())
-  status          PaymentStatus @default(UNPAID) // Bổ sung status cho Payment để tracking riêng
+  status          PaymentStatus @default(UNPAID)
   booking         Booking       @relation(fields: [bookingId], references: [id])
+}
+
+// [MỚI] Chức năng 1: Wishlist
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String
+  roomId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, roomId])
+  @@index([userId])
 }

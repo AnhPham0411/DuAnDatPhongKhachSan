@@ -1,5 +1,3 @@
-import { handlers } from "@/auth"; 
-// Lưu ý: chỉnh lại đường dẫn import đúng với nơi bạn đặt file auth.ts
-// Nếu auth.ts ở src/auth.ts thì import { handlers } from "@/auth";
+import { handlers } from "@/lib/auth"; // Bây giờ file này sẽ tìm thấy 'handlers'
 
 export const { GET, POST } = handlers;

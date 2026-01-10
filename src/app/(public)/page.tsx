@@ -1,34 +1,192 @@
-import { getRooms } from "@/actions/get-rooms";
-import { RoomCard } from "@/components/public/room-card";
-import { Button } from "@/components/ui/button";
+import { Suspense } from "react";
 import Link from "next/link";
+import { getRooms } from "@/actions/client/get-rooms";
+import { RoomCard } from "@/components/client/room-card";
+import { SearchFilters } from "@/components/client/search-filters";
+import { HeroSlider } from "@/components/client/hero-slider";
+import { Button } from "@/components/ui/button";
+import { auth } from "@/lib/auth"; 
+import { 
+  Wifi, Utensils, Waves, Car, ArrowRight, 
+  MapPin, Clock, ShieldCheck, Heart 
+} from "lucide-react";
 
-export default async function HomePage() {
-  const rooms = await getRooms();
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function HomePage(props: PageProps) {
+  // 1. Xử lý SearchParams & Auth
+  const params = await props.searchParams;
+  const session = await auth();
+
+  const category = typeof params.category === "string" ? params.category : undefined;
+  const guests = typeof params.guests === "string" ? Number(params.guests) : undefined;
+  const startDate = typeof params.startDate === "string" ? params.startDate : undefined;
+  const endDate = typeof params.endDate === "string" ? params.endDate : undefined;
+
+  // 2. Lấy dữ liệu
+  const rooms = await getRooms({ category, guests, startDate, endDate });
+
+  // 3. Lọc phòng rating cao
+  const highRatedRooms = rooms
+    .map((room) => {
+      const totalReviews = room.reviews?.length || 0;
+      const avgRating = totalReviews > 0
+        ? room.reviews.reduce((sum: number, r: any) => sum + (r.rating || 0), 0) / totalReviews
+        : 0;
+      return { ...room, avgRating };
+    })
+    .filter((r) => r.avgRating >= 4.0)
+    .sort((a, b) => b.avgRating - a.avgRating)
+    .slice(0, 8);
 
   return (
-    <div className="flex flex-col">
-        {/* Banner */}
-        <div className="relative h-[500px] bg-slate-900 flex items-center justify-center text-white">
-            <div className="absolute inset-0 opacity-50 bg-[url('https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?q=80&w=2070')] bg-cover bg-center" />
-            <div className="relative z-10 text-center space-y-4 px-4">
-                <h1 className="text-5xl font-bold">Trải nghiệm kỳ nghỉ tuyệt vời</h1>
-                <p className="text-xl max-w-2xl mx-auto">Hệ thống đặt phòng khách sạn trực tuyến hàng đầu.</p>
-                <Link href="/rooms">
-                    <Button size="lg" className="mt-4 bg-blue-600 hover:bg-blue-700 border-none">Đặt phòng ngay</Button>
-                </Link>
-            </div>
-        </div>
+    <div className="flex flex-col min-h-screen bg-slate-50/50 font-sans">
+      
+      {/* --- HERO SECTION (ĐÃ KHÔI PHỤC VỀ CŨ) --- */}
+      <section className="relative h-[500px] md:h-[600px]">
+        <HeroSlider />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
 
-        {/* Featured List */}
-        <div className="container mx-auto py-16 px-4">
-            <h2 className="text-3xl font-bold mb-8 text-center">Phòng nổi bật</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {rooms.slice(0, 4).map((room) => (
-                    <RoomCard key={room.id} data={room} />
-                ))}
+        {/* SEARCH FLOATING */}
+        <div className="absolute bottom-0 left-0 right-0 z-40 translate-y-1/2 px-4">
+          <div className="container mx-auto">
+            <div className="mx-auto max-w-5xl rounded-2xl border border-slate-100 bg-white p-6 shadow-xl">
+              <SearchFilters />
             </div>
+          </div>
         </div>
+      </section>
+
+      {/* --- MAIN CONTENT --- */}
+      <main className="container mx-auto px-4 pt-32 pb-24 space-y-24">
+        
+        {/* WHY CHOOSE US */}
+        <section>
+             <div className="text-center mb-16 space-y-3">
+                 <span className="text-blue-600 font-bold tracking-widest uppercase text-xs">Dịch vụ đẳng cấp</span>
+                 <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900">Tại sao chọn Ha Long Stay?</h2>
+                 <p className="text-slate-500 max-w-2xl mx-auto">Chăm chút từng chi tiết nhỏ nhất để kỳ nghỉ của bạn trở nên hoàn hảo.</p>
+             </div>
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[
+                    { icon: ShieldCheck, title: "An toàn tuyệt đối", desc: "Bảo mật thông tin & thanh toán an toàn.", color: "bg-green-100 text-green-600" },
+                    { icon: Clock, title: "Hỗ trợ 24/7", desc: "Đội ngũ lễ tân sẵn sàng phục vụ bất kể giờ nào.", color: "bg-blue-100 text-blue-600" },
+                    { icon: MapPin, title: "Vị trí Đắc địa", desc: "Trung tâm Bãi Cháy, view biển trực diện.", color: "bg-purple-100 text-purple-600" },
+                    { icon: Heart, title: "Dịch vụ Tận tâm", desc: "Phục vụ từ trái tim, cảm giác như ở nhà.", color: "bg-red-100 text-red-600" },
+                ].map((item, idx) => (
+                    <div key={idx} className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
+                        <div className={`w-12 h-12 ${item.color} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+                            <item.icon className="h-6 w-6" />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-900 mb-2">{item.title}</h3>
+                        <p className="text-sm text-slate-500 leading-relaxed">{item.desc}</p>
+                    </div>
+                ))}
+             </div>
+        </section>
+
+        {/* FEATURED ROOMS */}
+        <section id="rooms" className="scroll-mt-32">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+            <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <div className="h-1 w-10 bg-blue-600 rounded-full"></div>
+                    <span className="text-blue-600 font-bold uppercase text-sm tracking-widest">Gợi ý cho bạn</span>
+                </div>
+                <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900">
+                    Phòng được yêu thích nhất
+                </h2>
+            </div>
+            <Link href="/search">
+                <Button variant="outline" className="rounded-full px-6 border-slate-300 hover:border-blue-600 hover:text-blue-600 transition-colors">
+                    Xem tất cả <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+            </Link>
+          </div>
+          
+          <Suspense fallback={<div className="h-40 flex items-center justify-center">Đang tải danh sách phòng...</div>}>
+            {highRatedRooms.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 bg-white rounded-3xl border border-dashed border-slate-200 text-center">
+                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                        <Waves className="h-8 w-8 text-slate-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900">Chưa có phòng đánh giá cao</h3>
+                    <p className="text-slate-500 max-w-sm mt-2">
+                        Hiện tại chưa có phòng nào đạt trên 4.0 sao. Mời bạn xem tất cả phòng.
+                    </p>
+                    <Link href="/search">
+                        <Button variant="link" className="mt-2 text-blue-600">Xem tất cả phòng</Button>
+                    </Link>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                    {highRatedRooms.map((room) => (
+                        <RoomCard 
+                            key={room.id} 
+                            room={room} 
+                            currentUser={session?.user} 
+                        />
+                    ))}
+                </div>
+            )}
+          </Suspense>
+        </section>
+
+        {/* DISCOVER FOOD */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center bg-white rounded-3xl p-8 lg:p-12 shadow-lg border border-slate-100 overflow-hidden">
+            <div className="space-y-6 order-2 lg:order-1">
+                <span className="text-orange-500 font-bold uppercase text-sm tracking-widest">Trải nghiệm ẩm thực</span>
+                <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 leading-tight">
+                    Tinh hoa ẩm thực Á - Âu
+                </h2>
+                <p className="text-slate-500 text-lg leading-relaxed">
+                    Nhà hàng **Ocean View** mang đến những món hải sản tươi sống nhất từ vịnh Hạ Long, được chế biến bởi bếp trưởng 5 sao.
+                </p>
+                <ul className="space-y-3">
+                    {['Buffet sáng miễn phí', 'Tiệc nướng BBQ bãi biển', 'Private Dinner lãng mạn'].map((item, i) => (
+                        <li key={i} className="flex items-center gap-3 text-slate-700 font-medium">
+                            <div className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0">
+                                <Utensils className="h-3 w-3" />
+                            </div>
+                            {item}
+                        </li>
+                    ))}
+                </ul>
+                <Button className="mt-4 bg-slate-900 hover:bg-slate-800 text-white px-8 py-6 rounded-xl h-auto text-lg">
+                    Đặt bàn ngay
+                </Button>
+            </div>
+            <div className="relative h-[300px] lg:h-[500px] rounded-2xl overflow-hidden group order-1 lg:order-2">
+                <div className="absolute inset-0 bg-slate-300 animate-pulse group-hover:scale-105 transition-transform duration-700 bg-[url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center" />
+            </div>
+        </section>
+
+        {/* CTA FOOTER */}
+        <section className="relative rounded-3xl overflow-hidden bg-blue-600 py-24 px-6 text-center shadow-2xl shadow-blue-200">
+             <div className="absolute top-0 left-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+             <div className="absolute bottom-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+             
+             <div className="relative z-10 max-w-3xl mx-auto space-y-8">
+                 <h2 className="text-3xl md:text-5xl font-extrabold text-white leading-tight">
+                     Kỳ nghỉ trong mơ đang chờ bạn!
+                 </h2>
+                 <p className="text-blue-100 text-xl font-medium">
+                     Đăng ký thành viên ngay hôm nay để nhận ưu đãi lên đến <span className="text-yellow-300 font-bold">20%</span>.
+                 </p>
+                 <div className="flex flex-col sm:flex-row justify-center gap-4">
+                    <Link href="/search">
+                        <Button size="lg" className="h-14 px-8 text-lg bg-white text-blue-700 hover:bg-blue-50 font-bold shadow-lg border-0">
+                            Đặt phòng ngay
+                        </Button>
+                    </Link>
+                 </div>
+             </div>
+        </section>
+
+      </main>
     </div>
   );
 }

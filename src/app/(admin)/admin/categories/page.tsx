@@ -1,121 +1,109 @@
-import { getRoomTypes } from "@/actions/get-data";
-import { createRoomType, deleteRoomType } from "@/actions/mutations";
+import { db } from "@/lib/db";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Trash2, Plus, BedDouble, Users } from "lucide-react";
+import { Plus, Users, DollarSign, BedDouble, Pencil, MapPin } from "lucide-react";
+import { DeleteCategoryButton } from "@/components/admin/delete-category-button";
+import { Badge } from "@/components/ui/badge";
 
 export default async function CategoriesPage() {
-  const roomTypes = await getRoomTypes();
+  // Fetch dữ liệu: Include Location để lấy tên khách sạn
+  const categories = await db.roomType.findMany({
+    include: { 
+        _count: { select: { rooms: true } },
+        location: true // <--- QUAN TRỌNG: Lấy thông tin location
+    },
+    orderBy: [
+      { location: { name: 'asc' } }, // <--- Sửa: Sắp xếp theo tên location
+      { basePrice: 'asc' }
+    ]
+  });
 
   return (
-    <div className="p-8 space-y-8">
-      {/* HEADER */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Quản lý Loại phòng</h1>
-        <div className="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-medium">
-          Tổng: {roomTypes.length} loại
+    <div className="flex-1 space-y-8 p-8 pt-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Loại phòng (Hạng phòng)</h2>
+          <p className="text-muted-foreground">
+            Thiết lập các hạng phòng cho từng chi nhánh khách sạn trong chuỗi.
+          </p>
         </div>
+        <Link href="/admin/categories/new">
+          <Button>
+            <Plus className="mr-2 h-4 w-4" /> Thêm loại phòng
+          </Button>
+        </Link>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* --- CỘT TRÁI: FORM TẠO MỚI --- */}
-        <div className="lg:col-span-1">
-          <div className="bg-white p-6 rounded-xl shadow-sm border sticky top-8">
-            <h3 className="font-bold text-lg mb-4 flex items-center text-slate-800">
-              <Plus className="w-5 h-5 mr-2" /> Thêm loại mới
-            </h3>
-            
-            <form action={createRoomType} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Tên loại phòng</label>
-                <Input name="name" placeholder="VD: Deluxe King" required />
-              </div>
+      {categories.length === 0 ? (
+         <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-lg bg-slate-50/50">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 mb-4">
+               <BedDouble className="h-10 w-10 text-slate-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900">Chưa có dữ liệu</h3>
+            <p className="text-muted-foreground mb-4">Bạn chưa tạo loại phòng nào.</p>
+            <Link href="/admin/categories/new">
+              <Button variant="outline">Tạo loại phòng đầu tiên</Button>
+            </Link>
+         </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {categories.map((cat) => (
+            <div key={cat.id} className="group flex flex-col justify-between overflow-hidden rounded-xl border bg-white shadow-sm transition-all hover:shadow-md hover:border-blue-300">
               
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Giá gốc (VNĐ)</label>
-                  <Input name="basePrice" type="number" placeholder="500000" required />
+              {/* Content */}
+              <div className="p-5">
+                {/* 1. Badge tên Khách sạn (Lấy từ relation location) */}
+                <div className="mb-3">
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200 gap-1 pl-2 pr-2.5 py-0.5">
+                      <MapPin className="h-3 w-3" /> 
+                      {/* SỬA TẠI ĐÂY: Dùng location.name thay vì hotelName */}
+                      {cat.location?.name || "Chưa cập nhật vị trí"}
+                    </Badge>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Sức chứa</label>
-                  <Input name="capacity" type="number" placeholder="2" required />
-                </div>
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Mô tả ngắn</label>
-                <textarea 
-                  name="description" 
-                  className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  rows={3}
-                  placeholder="Mô tả về loại phòng này..."
-                />
-              </div>
-
-              <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800">
-                Tạo Loại Phòng
-              </Button>
-            </form>
-          </div>
-        </div>
-
-        {/* --- CỘT PHẢI: DANH SÁCH --- */}
-        <div className="lg:col-span-2 space-y-4">
-          {roomTypes.map((type) => (
-            <div key={type.id} className="group flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 bg-white border rounded-xl hover:shadow-md transition-shadow">
-              <div className="space-y-2 w-full">
-                <div className="flex items-center justify-between sm:justify-start gap-3">
-                  <h3 className="font-bold text-lg text-slate-800">{type.name}</h3>
-                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-xs font-medium text-slate-600 whitespace-nowrap">
-                    {type._count.rooms} phòng con
-                  </span>
-                </div>
-                
-                <p className="text-sm text-gray-500 line-clamp-2">
-                  {type.description || "Chưa có mô tả"}
-                </p>
-                
-                <div className="flex gap-3 pt-1 text-sm">
-                  <div className="flex items-center text-green-700 font-semibold bg-green-50 px-2 py-1 rounded border border-green-100">
-                    {Number(type.basePrice).toLocaleString()} đ
-                  </div>
-                  <div className="flex items-center text-gray-600 bg-gray-50 px-2 py-1 rounded border border-gray-100">
-                    <Users className="w-3 h-3 mr-1" /> {type.capacity} người
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="font-bold text-lg text-slate-900 line-clamp-1 group-hover:text-blue-600 transition-colors">
+                        {cat.name}
+                    </h3>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {cat._count.rooms} phòng đang hoạt động
+                    </div>
                   </div>
                 </div>
+
+                <div className="space-y-3 text-sm text-slate-600 border-t pt-4 border-dashed">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-slate-500">
+                          <Users className="h-4 w-4" /> Sức chứa
+                      </div>
+                      <span className="font-medium text-slate-900">{cat.capacity} người</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-slate-500">
+                          <DollarSign className="h-4 w-4" /> Giá gốc
+                      </div>
+                      <span className="font-bold text-slate-900 text-base">
+                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(cat.basePrice))}
+                      </span>
+                    </div>
+                </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 mt-4 sm:mt-0 sm:ml-4 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                {/* Nút Xóa (Quan trọng: Phải dùng form để gọi Server Action) */}
-                <form action={deleteRoomType.bind(null, type.id)}>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="text-red-400 hover:text-red-600 hover:bg-red-50"
-                    title="Xóa loại phòng"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </Button>
-                </form>
+              {/* Footer Actions */}
+              <div className="bg-slate-50 p-3 px-4 flex items-center gap-2 border-t">
+                 <Link href={`/admin/categories/${cat.id}`} className="flex-1">
+                    <Button variant="outline" size="sm" className="w-full bg-white hover:bg-slate-100 h-9">
+                        <Pencil className="mr-2 h-3.5 w-3.5" /> Chỉnh sửa
+                    </Button>
+                 </Link>
+                 <DeleteCategoryButton id={cat.id} />
               </div>
             </div>
           ))}
-
-          {/* Empty State */}
-          {roomTypes.length === 0 && (
-            <div className="text-center py-12 bg-white rounded-xl border border-dashed flex flex-col items-center justify-center">
-              <div className="bg-gray-50 p-4 rounded-full mb-3">
-                <BedDouble className="w-8 h-8 text-gray-400" />
-              </div>
-              <p className="text-gray-900 font-medium">Chưa có loại phòng nào</p>
-              <p className="text-sm text-gray-500">Hãy tạo loại phòng đầu tiên từ form bên trái.</p>
-            </div>
-          )}
         </div>
-
-      </div>
+      )}
     </div>
   );
 }
