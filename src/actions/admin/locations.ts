@@ -3,6 +3,7 @@
 import * as z from "zod";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth"; // Đảm bảo import đúng file cấu hình auth của bạn
 
 // Schema validate dữ liệu đầu vào
 const LocationSchema = z.object({
@@ -12,14 +13,24 @@ const LocationSchema = z.object({
   imageUrl: z.string().optional(),
 });
 
-export const createLocation = async (values: z.infer<typeof LocationSchema>) => {
-  const validatedFields = LocationSchema.safeParse(values);
-
-  if (!validatedFields.success) {
-    return { error: "Dữ liệu không hợp lệ!" };
+// Helper kiểm tra quyền Admin nhanh
+const checkAdmin = async () => {
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") {
+    throw new Error("Unauthorized");
   }
+};
 
+export const createLocation = async (values: z.infer<typeof LocationSchema>) => {
   try {
+    // CHẶN QUYỀN: Chỉ Admin mới được tạo chi nhánh mới
+    await checkAdmin();
+
+    const validatedFields = LocationSchema.safeParse(values);
+    if (!validatedFields.success) {
+      return { error: "Dữ liệu không hợp lệ!" };
+    }
+
     await db.location.create({
       data: {
         ...validatedFields.data,
@@ -28,7 +39,8 @@ export const createLocation = async (values: z.infer<typeof LocationSchema>) => 
 
     revalidatePath("/admin/locations");
     return { success: "Tạo chi nhánh thành công!" };
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "Unauthorized") return { error: "Bạn không có quyền thực hiện hành động này!" };
     return { error: "Lỗi hệ thống, vui lòng thử lại." };
   }
 };
@@ -37,13 +49,15 @@ export const updateLocation = async (
   id: string,
   values: z.infer<typeof LocationSchema>
 ) => {
-  const validatedFields = LocationSchema.safeParse(values);
-
-  if (!validatedFields.success) {
-    return { error: "Dữ liệu không hợp lệ!" };
-  }
-
   try {
+    // CHẶN QUYỀN: Chỉ Admin mới được sửa thông tin chi nhánh
+    await checkAdmin();
+
+    const validatedFields = LocationSchema.safeParse(values);
+    if (!validatedFields.success) {
+      return { error: "Dữ liệu không hợp lệ!" };
+    }
+
     await db.location.update({
       where: { id },
       data: {
@@ -53,20 +67,25 @@ export const updateLocation = async (
 
     revalidatePath("/admin/locations");
     return { success: "Cập nhật chi nhánh thành công!" };
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "Unauthorized") return { error: "Bạn không có quyền thực hiện hành động này!" };
     return { error: "Lỗi hệ thống, vui lòng thử lại." };
   }
 };
 
 export const deleteLocation = async (id: string) => {
   try {
+    // CHẶN QUYỀN: Chỉ Admin mới được xóa chi nhánh
+    await checkAdmin();
+
     await db.location.delete({
       where: { id },
     });
 
     revalidatePath("/admin/locations");
     return { success: "Đã xóa chi nhánh." };
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "Unauthorized") return { error: "Bạn không có quyền thực hiện hành động này!" };
     return { error: "Không thể xóa (có thể do đang có phòng thuộc chi nhánh này)." };
   }
 };

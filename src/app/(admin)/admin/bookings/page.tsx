@@ -1,3 +1,5 @@
+"use server";
+
 import { db } from "@/lib/db";
 import { format } from "date-fns";
 import { BookingActions } from "@/components/admin/booking-actions";
@@ -11,7 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CalendarDays, DollarSign, User } from "lucide-react";
+import { CalendarDays, User } from "lucide-react";
+import { auth } from "@/lib/auth"; // 1. Import hàm auth từ cấu hình của bạn
 
 // --- Helpers ---
 const formatCurrency = (amount: number) => {
@@ -55,7 +58,11 @@ const getPaymentBadge = (status: string) => {
     );
 };
 
+// 2. BookingsPage phải là async function
 export default async function BookingsPage() {
+  // 3. Lấy session ở tầng Server Component
+  const session = await auth();
+
   const bookings = await db.booking.findMany({
     include: {
       user: { select: { name: true, email: true } },
@@ -75,7 +82,6 @@ export default async function BookingsPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -120,10 +126,10 @@ export default async function BookingsPage() {
                     <div className="flex flex-col">
                         <span className="font-medium flex items-center gap-1 text-sm">
                              <User className="h-3 w-3 text-slate-400" />
-                             {booking.guestName || booking.user.name}
+                             {booking.guestName || booking.user?.name}
                         </span>
                         <span className="text-xs text-muted-foreground ml-4">
-                            {booking.guestPhone || booking.user.email}
+                            {booking.guestPhone || booking.user?.email}
                         </span>
                     </div>
                   </TableCell>
@@ -135,8 +141,6 @@ export default async function BookingsPage() {
                   <TableCell>
                     <div className="text-xs text-slate-600">
                         <div className="font-medium">{format(booking.checkIn, "dd/MM")} → {format(booking.checkOut, "dd/MM/yyyy")}</div>
-                        {/* Tính số đêm (Optional) */}
-                        {/* <div className="text-slate-400">2 đêm</div> */}
                     </div>
                   </TableCell>
 
@@ -159,6 +163,8 @@ export default async function BookingsPage() {
                         paymentStatus={booking.paymentStatus}
                         totalPrice={Number(booking.totalPrice)} 
                         guestName={booking.guestName || booking.user?.name || "Khách hàng"}
+                        // 4. Truyền dữ liệu an toàn vào component Thao tác
+                        currentUserRole={session?.user?.role}
                     />
                   </TableCell>
                 </TableRow>

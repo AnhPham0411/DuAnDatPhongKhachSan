@@ -3,44 +3,44 @@
 import * as z from "zod";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth"; // Đảm bảo import đúng cấu hình auth
 
-// 1. Cập nhật Schema: Thêm locationId
+// 1. Schema (Giữ nguyên)
 const CategorySchema = z.object({
-  name: z.string().min(1, {
-    message: "Tên không được để trống",
-  }),
-  locationId: z.string().min(1, { 
-    message: "Vui lòng chọn vị trí/khách sạn" 
-  }), // <--- Quan trọng: Field này bắt buộc
+  name: z.string().min(1, { message: "Tên không được để trống" }),
+  locationId: z.string().min(1, { message: "Vui lòng chọn vị trí/khách sạn" }),
   description: z.string().optional(),
-  basePrice: z.coerce.number().min(0, {
-    message: "Giá không được âm"
-  }),
-  capacity: z.coerce.number().min(1, {
-    message: "Sức chứa tối thiểu là 1 người"
-  }),
-  amenities: z.array(z.string()).optional(), // Nhận mảng ID tiện nghi
+  basePrice: z.coerce.number().min(0, { message: "Giá không được âm" }),
+  capacity: z.coerce.number().min(1, { message: "Sức chứa tối thiểu là 1 người" }),
+  amenities: z.array(z.string()).optional(),
 });
 
-export const createCategory = async (values: z.infer<typeof CategorySchema>) => {
-  const validatedFields = CategorySchema.safeParse(values);
-
-  if (!validatedFields.success) {
-    return { error: "Dữ liệu không hợp lệ! Vui lòng kiểm tra lại." };
+// Helper kiểm tra quyền Admin
+const checkAdmin = async () => {
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") {
+    throw new Error("Unauthorized");
   }
+};
 
-  // 2. Tách amenities và locationId ra để xử lý quan hệ
-  const { amenities, locationId, ...data } = validatedFields.data;
-
+export const createCategory = async (values: z.infer<typeof CategorySchema>) => {
   try {
+    // CHẶN QUYỀN: Chỉ Admin mới được tạo loại phòng
+    await checkAdmin();
+
+    const validatedFields = CategorySchema.safeParse(values);
+    if (!validatedFields.success) {
+      return { error: "Dữ liệu không hợp lệ! Vui lòng kiểm tra lại." };
+    }
+
+    const { amenities, locationId, ...data } = validatedFields.data;
+
     await db.roomType.create({
       data: {
         ...data,
-        // 3. Kết nối với Location (Bắt buộc)
         location: {
-            connect: { id: locationId }
+          connect: { id: locationId }
         },
-        // 4. Kết nối với Amenities (Nhiều - Nhiều)
         amenities: {
           connect: amenities?.map((id) => ({ id })) || [],
         },
@@ -49,7 +49,8 @@ export const createCategory = async (values: z.infer<typeof CategorySchema>) => 
 
     revalidatePath("/admin/categories");
     return { success: "Tạo loại phòng thành công!" };
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "Unauthorized") return { error: "Bạn không có quyền thực hiện hành động này!" };
     console.log("CREATE_CATEGORY_ERROR", error);
     return { error: "Lỗi hệ thống, vui lòng thử lại." };
   }
@@ -59,24 +60,24 @@ export const updateCategory = async (
   id: string,
   values: z.infer<typeof CategorySchema>
 ) => {
-  const validatedFields = CategorySchema.safeParse(values);
-
-  if (!validatedFields.success) {
-    return { error: "Dữ liệu không hợp lệ!" };
-  }
-
-  const { amenities, locationId, ...data } = validatedFields.data;
-
   try {
+    // CHẶN QUYỀN: Chỉ Admin mới được sửa thông tin loại phòng
+    await checkAdmin();
+
+    const validatedFields = CategorySchema.safeParse(values);
+    if (!validatedFields.success) {
+      return { error: "Dữ liệu không hợp lệ!" };
+    }
+
+    const { amenities, locationId, ...data } = validatedFields.data;
+
     await db.roomType.update({
       where: { id },
       data: {
         ...data,
-        // Cập nhật Location (Chuyển sang chi nhánh khác nếu cần)
         location: {
-            connect: { id: locationId }
+          connect: { id: locationId }
         },
-        // Cập nhật Amenities: Dùng set để thay thế danh sách cũ
         amenities: {
           set: amenities?.map((id) => ({ id })) || [],
         },
@@ -84,10 +85,10 @@ export const updateCategory = async (
     });
 
     revalidatePath("/admin/categories");
-    // Nếu bạn có trang chi tiết, revalidate cả trang đó
     revalidatePath(`/admin/categories/${id}`); 
     return { success: "Cập nhật loại phòng thành công!" };
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "Unauthorized") return { error: "Bạn không có quyền thực hiện hành động này!" };
     console.log("UPDATE_CATEGORY_ERROR", error);
     return { error: "Lỗi hệ thống, vui lòng thử lại." };
   }
@@ -95,7 +96,9 @@ export const updateCategory = async (
 
 export const deleteCategory = async (id: string) => {
   try {
-    // Kiểm tra ràng buộc: Có phòng nào đang thuộc loại này không?
+    // CHẶN QUYỀN: Chỉ Admin mới được xóa
+    await checkAdmin();
+
     const existingRooms = await db.room.findFirst({
         where: { roomTypeId: id }
     });
@@ -110,7 +113,8 @@ export const deleteCategory = async (id: string) => {
 
     revalidatePath("/admin/categories");
     return { success: "Đã xóa loại phòng." };
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "Unauthorized") return { error: "Bạn không có quyền thực hiện hành động này!" };
     console.log("DELETE_CATEGORY_ERROR", error);
     return { error: "Lỗi hệ thống! Không thể xóa." };
   }

@@ -10,17 +10,20 @@ export default async function AdminLayout({
 }) {
   const session = await auth();
 
-  // Redirect if not logged in or not an Admin
-  if (!session?.user || session.user.role !== "ADMIN") {
-    redirect("/");
+  // Dòng này sẽ in ra Terminal của VS Code (không phải trình duyệt)
+  // Hãy nhìn vào đó để xem Role thực tế là gì
+  // console.log("DEBUG LAYOUT ROLE:", session?.user?.role);
+
+  // Sửa điều kiện: Chỉ đuổi ra ngoài nếu KHÔNG PHẢI Admin VÀ KHÔNG PHẢI Staff
+  const canAccess = session?.user?.role === "ADMIN" || session?.user?.role === "STAFF";
+
+  if (!canAccess) {
+    return redirect("/");
   }
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
-      {/* Sidebar - Fixed Left */}
-      <AdminSidebar />
-      
-      {/* Main Content - Flex Right */}
+      <AdminSidebar role={session?.user?.role} />
       <div className="flex-1 flex flex-col min-w-0">
         <AdminNavbar />
         <main className="flex-1 overflow-y-auto p-4 md:p-8">

@@ -1,12 +1,20 @@
 "use server";
 
 import { db } from "@/lib/db";
+import { auth } from "@/lib/auth"; // ✅ Import Auth để check quyền
 
 export const getCalendarBookings = async (start: Date, end: Date) => {
   try {
+    // 1. Kiểm tra quyền: Cả ADMIN và STAFF đều được xem lịch vận hành
+    const session = await auth();
+    const role = session?.user?.role;
+
+    if (role !== "ADMIN" && role !== "STAFF") {
+      return { error: "Bạn không có quyền xem dữ liệu này!" };
+    }
+
     const bookings = await db.booking.findMany({
       where: {
-        // Lấy các booking nằm trong khoảng thời gian view của lịch
         OR: [
           {
             checkIn: { lte: end },
@@ -14,7 +22,7 @@ export const getCalendarBookings = async (start: Date, end: Date) => {
           },
         ],
         status: {
-            not: "CANCELLED"
+          not: "CANCELLED"
         }
       },
       select: {
@@ -32,18 +40,18 @@ export const getCalendarBookings = async (start: Date, end: Date) => {
       },
     });
 
-    // Map dữ liệu về format thư viện lịch (ví dụ FullCalendar) cần
     const events = bookings.map((booking) => ({
       id: booking.id,
       title: `${booking.room.name} - ${booking.guestName || "Khách"}`,
       start: booking.checkIn,
       end: booking.checkOut,
-      resourceId: booking.room.id, // Dùng cho Gantt chart chia theo phòng
+      resourceId: booking.room.id,
       status: booking.status,
     }));
 
     return { events };
   } catch (error) {
+    console.error("[GET_CALENDAR_ERROR]", error);
     return { error: "Lỗi lấy dữ liệu lịch!" };
   }
 };

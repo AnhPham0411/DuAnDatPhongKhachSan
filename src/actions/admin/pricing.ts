@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { auth } from "@/lib/auth"; // Đảm bảo import đúng cấu hình auth của bạn
 
 const SeasonalPriceSchema = z.object({
   roomId: z.string(),
@@ -11,8 +12,19 @@ const SeasonalPriceSchema = z.object({
   price: z.coerce.number().min(0, "Giá không được âm"),
 });
 
+// Helper kiểm tra quyền Admin
+const checkAdmin = async () => {
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") {
+    throw new Error("Unauthorized");
+  }
+};
+
 export const createSeasonalPrice = async (values: z.infer<typeof SeasonalPriceSchema>) => {
   try {
+    // 🛑 CHẶN QUYỀN: Chỉ Admin mới được thiết lập biểu giá
+    await checkAdmin();
+
     const validated = SeasonalPriceSchema.safeParse(values);
     if (!validated.success) return { error: "Dữ liệu không hợp lệ!" };
 
@@ -24,13 +36,11 @@ export const createSeasonalPrice = async (values: z.infer<typeof SeasonalPriceSc
     }
 
     // 2. Validate Logic: Kiểm tra xem khoảng thời gian này đã có giá mùa vụ nào chưa?
-    // Tránh việc Admin set 2 mức giá khác nhau cho cùng 1 ngày -> Gây lỗi tính tiền
     const existingPrice = await db.seasonalPrice.findFirst({
       where: {
         roomId,
         OR: [
           {
-            // Kiểm tra giao thoa ngày
             startDate: { lte: endDate },
             endDate: { gte: startDate },
           },
@@ -40,7 +50,7 @@ export const createSeasonalPrice = async (values: z.infer<typeof SeasonalPriceSc
 
     if (existingPrice) {
       return { 
-        error: "Khoảng thời gian này bị trùng với một cài đặt giá khác! Vui lòng xóa cũ hoặc chọn ngày khác." 
+        error: "Khoảng thời gian này bị trùng với một cài đặt giá khác!" 
       };
     }
 
@@ -56,7 +66,8 @@ export const createSeasonalPrice = async (values: z.infer<typeof SeasonalPriceSc
 
     revalidatePath(`/admin/rooms/${roomId}`);
     return { success: "Đã thiết lập giá mùa vụ thành công!" };
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "Unauthorized") return { error: "Bạn không có quyền thiết lập giá!" };
     console.log("CREATE_SEASONAL_PRICE_ERROR", error);
     return { error: "Lỗi Server!" };
   }
@@ -64,10 +75,14 @@ export const createSeasonalPrice = async (values: z.infer<typeof SeasonalPriceSc
 
 export const deleteSeasonalPrice = async (id: string, roomId: string) => {
   try {
+    // 🛑 CHẶN QUYỀN: Chỉ Admin mới được xóa biểu giá
+    await checkAdmin();
+
     await db.seasonalPrice.delete({ where: { id } });
     revalidatePath(`/admin/rooms/${roomId}`);
     return { success: "Đã xóa giá mùa vụ!" };
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "Unauthorized") return { error: "Bạn không có quyền thực hiện hành động này!" };
     return { error: "Lỗi Server!" };
   }
 };

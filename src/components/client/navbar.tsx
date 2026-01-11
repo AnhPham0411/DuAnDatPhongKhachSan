@@ -188,10 +188,10 @@ export const Navbar = () => {
             ) : (
               <>
                 <Button variant="ghost" asChild className="rounded-full font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50">
-                  <Link href="/auth/login">Đăng nhập</Link>
+                  <Link href="/login">Đăng nhập</Link>
                 </Button>
                 <Button asChild className="rounded-full bg-blue-600 hover:bg-blue-700 font-bold px-6 shadow-md shadow-blue-200">
-                  <Link href="/auth/register">Đăng ký</Link>
+                  <Link href="/register">Đăng ký</Link>
                 </Button>
               </>
             )}

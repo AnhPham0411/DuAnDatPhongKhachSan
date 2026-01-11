@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, Bed, Users, Filter, X, MapPin, Building2 } from "lucide-react";
+import { Plus, Search, Bed, Users, X, MapPin, Building2 } from "lucide-react";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { RoomActions } from "@/components/admin/room-actions";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
+// Định nghĩa Interface cho Next.js 15 Props
+// searchParams phải là một Promise
+interface RoomsPageProps {
+  searchParams: Promise<{ query?: string }>;
+}
+
 const formatPrice = (price: number) => {
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -23,27 +29,25 @@ const formatPrice = (price: number) => {
   }).format(price);
 };
 
-export default async function RoomsPage({
-  searchParams,
-}: {
-  searchParams: { query?: string };
-}) {
-  const query = searchParams?.query || "";
+export default async function RoomsPage({ searchParams }: RoomsPageProps) {
+  // 1. Giải nén searchParams (Cần thiết cho Next.js 15)
+  const resolvedSearchParams = await searchParams;
+  const query = resolvedSearchParams?.query || "";
 
-  // 1. Fetch dữ liệu
+  // 2. Fetch dữ liệu từ DB
+  // Lưu ý: Đã bỏ mode: "insensitive" vì SQLite không hỗ trợ
   const rooms = await db.room.findMany({
     where: {
       OR: [
         { name: { contains: query } },
         { roomType: { name: { contains: query } } },
-        // SỬA: Tìm theo location.name thay vì hotelName
         { roomType: { location: { name: { contains: query } } } },
       ],
     },
     include: { 
       roomType: {
         include: {
-            location: true // SỬA: Include thêm location để lấy tên
+            location: true 
         }
       },
       images: true, 
@@ -96,10 +100,10 @@ export default async function RoomsPage({
         </div>
         
         <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-100 px-3 py-1.5 rounded-md">
-           <Building2 className="h-4 w-4" />
-           <span>Tổng: <strong>{totalRooms}</strong> phòng</span>
-           <span className="mx-1">|</span>
-           <span className="text-green-600">Sẵn sàng: <strong>{activeRooms}</strong></span>
+            <Building2 className="h-4 w-4" />
+            <span>Tổng: <strong>{totalRooms}</strong> phòng</span>
+            <span className="mx-1">|</span>
+            <span className="text-green-600">Sẵn sàng: <strong>{activeRooms}</strong></span>
         </div>
       </div>
 
@@ -157,7 +161,6 @@ export default async function RoomsPage({
                   <TableCell>
                     <div className="flex items-center gap-1.5 text-blue-700 font-medium">
                         <MapPin className="h-3.5 w-3.5" />
-                        {/* SỬA: Lấy tên Location thay vì hotelName */}
                         {room.roomType.location?.name || "Chưa cập nhật"}
                     </div>
                   </TableCell>

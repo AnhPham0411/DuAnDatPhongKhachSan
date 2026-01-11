@@ -9,25 +9,38 @@ export const updateUserRole = async (userId: string, newRole: UserRole) => {
   try {
     const session = await auth();
 
-    // 1. Check quyền Admin
-    if (!session?.user || session.user.role !== "ADMIN") {
-      return { error: "Không có quyền thực hiện!" };
+    // 1. Check quyền Admin tầng Server
+    if (session?.user?.role !== "ADMIN") {
+      return { error: "Từ chối truy cập: Chỉ Quản trị viên tối cao mới có quyền này!" };
     }
 
-    // 2. Chặn tự đổi quyền chính mình (để không bị mất quyền admin)
+    // 2. Chặn tự đổi quyền chính mình (Bảo vệ tài khoản Admin hiện tại)
     if (session.user.id === userId) {
-      return { error: "Không thể tự thay đổi quyền của chính mình!" };
+      return { error: "Bạn không thể tự hạ quyền của chính mình để tránh mất quyền quản trị!" };
     }
 
-    // 3. Update CHỈ trường ROLE (An toàn tuyệt đối)
-    await db.user.update({
+    // 3. Kiểm tra User mục tiêu có tồn tại không trước khi Update
+    const targetUser = await db.user.findUnique({
       where: { id: userId },
-      data: { role: newRole }, // 👈 Chỉ update dòng này
+      select: { role: true }
     });
 
+    if (!targetUser) {
+      return { error: "Người dùng không tồn tại trong hệ thống!" };
+    }
+
+    // 4. Update CHỈ trường ROLE
+    await db.user.update({
+      where: { id: userId },
+      data: { role: newRole },
+    });
+
+    // 5. Làm mới cache trang quản lý người dùng
     revalidatePath("/admin/users");
-    return { success: `Đã cập nhật quyền thành ${newRole}` };
+    
+    return { success: `Đã nâng cấp người dùng thành ${newRole} thành công!` };
   } catch (error) {
-    return { error: "Lỗi hệ thống!" };
+    console.error("[UPDATE_USER_ROLE_ERROR]", error);
+    return { error: "Lỗi hệ thống khi cập nhật quyền!" };
   }
 };

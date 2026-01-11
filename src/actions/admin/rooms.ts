@@ -1,28 +1,25 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth"; // ✅ Import Auth để check quyền
+import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-// Schema Validation
 const RoomSchema = z.object({
   name: z.string().min(1, "Tên phòng không được để trống"),
   roomTypeId: z.string().min(1, "Vui lòng chọn loại phòng"),
   isAvailable: z.boolean(),
-  // Validate mảng ảnh
   images: z.object({ 
     url: z.string().min(1, "URL ảnh không hợp lệ") 
   }).array(), 
 });
 
-// --- 1. CREATE ROOM ---
+// --- 1. CREATE ROOM (CHỈ ADMIN) ---
 export const createRoom = async (values: z.infer<typeof RoomSchema>) => {
   try {
-    // 🔒 BẢO MẬT: Check quyền Admin
     const session = await auth();
     if (session?.user.role !== "ADMIN") {
-      return { error: "Bạn không có quyền thực hiện hành động này!" };
+      return { error: "Bạn không có quyền tạo phòng mới!" };
     }
 
     const validatedFields = RoomSchema.safeParse(values);
@@ -41,25 +38,25 @@ export const createRoom = async (values: z.infer<typeof RoomSchema>) => {
       },
     });
 
-    // 🔄 Làm mới dữ liệu ở các trang liên quan
     revalidatePath("/admin/rooms");
-    revalidatePath("/search"); // Làm mới trang tìm kiếm của khách
-    revalidatePath("/");       // Làm mới trang chủ (nếu có hiện phòng mới)
+    revalidatePath("/search");
+    revalidatePath("/");
     
     return { success: "Tạo phòng thành công!" };
   } catch (error) {
-    console.log("CREATE_ROOM_ERROR", error);
     return { error: "Lỗi hệ thống!" };
   }
 };
 
-// --- 2. UPDATE ROOM ---
+// --- 2. UPDATE ROOM (ADMIN & STAFF) ---
 export const updateRoom = async (id: string, values: z.infer<typeof RoomSchema>) => {
   try {
-    // 🔒 BẢO MẬT
     const session = await auth();
-    if (session?.user.role !== "ADMIN") {
-      return { error: "Bạn không có quyền thực hiện hành động này!" };
+    const role = session?.user.role;
+
+    // Cho phép Staff cập nhật để họ có thể đổi trạng thái isAvailable (Sẵn sàng/Bận)
+    if (role !== "ADMIN" && role !== "STAFF") {
+      return { error: "Bạn không có quyền chỉnh sửa thông tin phòng!" };
     }
 
     const validatedFields = RoomSchema.safeParse(values);
@@ -67,14 +64,16 @@ export const updateRoom = async (id: string, values: z.infer<typeof RoomSchema>)
 
     const { images, ...data } = validatedFields.data;
 
-    // Logic update: Sửa thông tin + Thay thế toàn bộ ảnh
+    // Bảo mật thêm: Nếu là STAFF, có thể giới hạn họ chỉ được sửa trạng thái isAvailable
+    // Nhưng ở đây cho phép STAFF sửa để linh hoạt trong việc cập nhật ảnh phòng nếu cần.
+    
     await db.room.update({
       where: { id },
       data: {
         ...data,
         images: {
-          deleteMany: {}, // Xóa ảnh cũ
-          createMany: {   // Thêm ảnh mới
+          deleteMany: {},
+          createMany: {
             data: images,
           }
         },
@@ -84,42 +83,26 @@ export const updateRoom = async (id: string, values: z.infer<typeof RoomSchema>)
     revalidatePath(`/admin/rooms/${id}`);
     revalidatePath("/admin/rooms");
     revalidatePath("/search");
-    revalidatePath("/"); 
-
     return { success: "Cập nhật phòng thành công!" };
   } catch (error) {
-    console.log("UPDATE_ROOM_ERROR", error);
     return { error: "Lỗi hệ thống!" };
   }
 };
 
-// --- 3. DELETE ROOM ---
+// --- 3. DELETE ROOM (CHỈ ADMIN) ---
 export const deleteRoom = async (id: string) => {
   try {
-    // 🔒 BẢO MẬT
     const session = await auth();
     if (session?.user.role !== "ADMIN") {
-      return { error: "Bạn không có quyền thực hiện hành động này!" };
+      return { error: "Từ chối: Chỉ Quản trị viên mới có quyền xóa phòng!" };
     }
-
-    // Kiểm tra xem phòng có đang có Booking nào chưa hoàn thành không?
-    // (Tùy chọn: Nếu muốn chặt chẽ hơn thì mở comment này ra)
-    /*
-    const activeBooking = await db.booking.findFirst({
-        where: { roomId: id, status: { not: "CHECKED_OUT" } }
-    });
-    if (activeBooking) return { error: "Phòng đang có khách đặt, không thể xóa!" };
-    */
 
     await db.room.delete({ where: { id } });
 
     revalidatePath("/admin/rooms");
     revalidatePath("/search");
-    revalidatePath("/");
-
-    return { success: "Đã xóa phòng!" };
+    return { success: "Đã xóa phòng thành công!" };
   } catch (error) {
-    console.log("DELETE_ROOM_ERROR", error);
-    return { error: "Lỗi hệ thống hoặc phòng đang có dữ liệu liên kết!" };
+    return { error: "Không thể xóa phòng đang có dữ liệu liên kết (đơn đặt phòng)!" };
   }
 };

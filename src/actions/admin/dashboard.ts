@@ -1,24 +1,22 @@
 "use server";
 
 import { db } from "@/lib/db";
+import { auth } from "@/lib/auth";
 
 export const getDashboardStats = async () => {
   try {
-    // 1. Tổng doanh thu (Chỉ tính đơn đã thanh toán hoặc đã check-out)
-    const paidBookings = await db.booking.findMany({
-      where: {
-        status: { in: ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"] }
-      }
-    });
-    
-    const revenue = paidBookings.reduce((total, booking) => {
-      return total + Number(booking.totalPrice);
-    }, 0);
+    const session = await auth();
+    const role = session?.user?.role;
 
-    // 2. Số lượng đơn đặt phòng
+    // 1. Kiểm tra quyền: Chỉ ADMIN và STAFF được vào Dashboard
+    if (role !== "ADMIN" && role !== "STAFF") {
+      return null;
+    }
+
+    // 2. Số lượng đơn đặt phòng (Cả 2 đều thấy)
     const bookingsCount = await db.booking.count();
 
-    // 3. Số lượng phòng đang hoạt động
+    // 3. Số lượng phòng đang hoạt động (Cả 2 đều thấy)
     const activeRoomsCount = await db.room.count({
       where: { isAvailable: true }
     });
@@ -33,15 +31,32 @@ export const getDashboardStats = async () => {
       },
     });
 
-    // 5. Tính toán doanh thu theo tháng (cho biểu đồ)
-    const graphRevenue = await getGraphRevenue();
+    // --- PHÂN QUYỀN DỮ LIỆU NHẠY CẢM ---
+    let revenue = 0;
+    let graphRevenue: any[] = [];
+
+    if (role === "ADMIN") {
+      // 5. Tổng doanh thu (Chỉ ADMIN thấy)
+      const paidBookings = await db.booking.findMany({
+        where: {
+          status: { in: ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"] }
+        }
+      });
+      
+      revenue = paidBookings.reduce((total, booking) => {
+        return total + Number(booking.totalPrice);
+      }, 0);
+
+      // 6. Dữ liệu biểu đồ (Chỉ ADMIN thấy)
+      graphRevenue = await getGraphRevenue();
+    }
 
     return {
-      revenue,
+      revenue,           // Sẽ là 0 nếu là STAFF
       bookingsCount,
       activeRoomsCount,
       recentBookings,
-      graphRevenue // Trả thêm dữ liệu biểu đồ
+      graphRevenue       // Sẽ là mảng rỗng nếu là STAFF
     };
   } catch (error) {
     console.log("[DASHBOARD_GET]", error);
@@ -49,7 +64,7 @@ export const getDashboardStats = async () => {
   }
 };
 
-// Hàm phụ: Nhóm doanh thu theo 12 tháng
+// Hàm phụ: Nhóm doanh thu theo 12 tháng (Hàm này thực tế chỉ được gọi bởi Admin ở trên)
 const getGraphRevenue = async () => {
   const paidBookings = await db.booking.findMany({
     where: {
@@ -58,32 +73,20 @@ const getGraphRevenue = async () => {
   });
 
   const monthlyRevenue: { [key: number]: number } = {};
+  for (let i = 0; i < 12; i++) monthlyRevenue[i] = 0;
 
-  // Khởi tạo 12 tháng = 0
-  for (let i = 0; i < 12; i++) {
-    monthlyRevenue[i] = 0;
-  }
-
-  // Cộng dồn tiền vào từng tháng
   for (const order of paidBookings) {
-    const month = order.createdAt.getMonth(); // 0 -> 11
+    const month = order.createdAt.getMonth();
     monthlyRevenue[month] = (monthlyRevenue[month] || 0) + Number(order.totalPrice);
   }
 
-  // Format lại cấu trúc cho Recharts
   const graphData = [
-    { name: "Thg 1", total: 0 },
-    { name: "Thg 2", total: 0 },
-    { name: "Thg 3", total: 0 },
-    { name: "Thg 4", total: 0 },
-    { name: "Thg 5", total: 0 },
-    { name: "Thg 6", total: 0 },
-    { name: "Thg 7", total: 0 },
-    { name: "Thg 8", total: 0 },
-    { name: "Thg 9", total: 0 },
-    { name: "Thg 10", total: 0 },
-    { name: "Thg 11", total: 0 },
-    { name: "Thg 12", total: 0 },
+    { name: "Thg 1", total: 0 }, { name: "Thg 2", total: 0 },
+    { name: "Thg 3", total: 0 }, { name: "Thg 4", total: 0 },
+    { name: "Thg 5", total: 0 }, { name: "Thg 6", total: 0 },
+    { name: "Thg 7", total: 0 }, { name: "Thg 8", total: 0 },
+    { name: "Thg 9", total: 0 }, { name: "Thg 10", total: 0 },
+    { name: "Thg 11", total: 0 }, { name: "Thg 12", total: 0 },
   ];
 
   for (const month in monthlyRevenue) {
