@@ -16,7 +16,8 @@ const SLIDES = [
   },
   {
     id: 2,
-    image: "https://images.unsplash.com/photo-1571896349842-6e53ce41be03?q=80&w=2070&auto=format&fit=crop",
+    // Đã thay thế ảnh mới: Luxury Infinity Pool & Spa
+    image: "https://images.unsplash.com/photo-1540541338287-41700207dee6?q=80&w=2070&auto=format&fit=crop", 
     title: "Không gian thư giãn tuyệt đối",
     subtitle: "Tận hưởng dịch vụ spa và hồ bơi vô cực đạt chuẩn 5 sao.",
   },

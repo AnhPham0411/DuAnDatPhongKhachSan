@@ -1,5 +1,5 @@
 "use client";
-
+import { BedDouble } from "lucide-react";
 import { useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -143,14 +143,22 @@ export const Navbar = () => {
     <nav className="sticky top-0 z-50 w-full border-b bg-white/80 backdrop-blur-md shadow-sm">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white group-hover:bg-blue-700 transition shadow-sm">
-            <Bed className="h-5 w-5" />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-slate-900">
-            MyHotel
-          </span>
-        </Link>
+        <Link href="/" className="flex items-center gap-3 group">
+      {/* Icon: Đổi sang màu Sky-500 và dùng BedDouble cho sang trọng hơn */}
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500 text-white shadow-lg shadow-sky-200 group-hover:bg-sky-600 group-hover:scale-105 transition-all duration-300">
+        <BedDouble className="h-6 w-6" />
+      </div>
+      
+      {/* Text: Chia dòng để tạo điểm nhấn thương hiệu */}
+      <div className="flex flex-col">
+        <span className="text-lg font-bold tracking-tight text-slate-900 leading-none">
+          Ha Long
+        </span>
+        <span className="text-xs font-bold text-sky-500 tracking-[0.2em] uppercase">
+          Stay
+        </span>
+      </div>
+    </Link>
 
         {/* Desktop Menu */}
         <div className="hidden md:flex items-center gap-1">

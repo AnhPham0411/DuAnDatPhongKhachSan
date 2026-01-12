@@ -52,18 +52,34 @@ export const SearchFilters = ({
     const paramGuests = searchParams.get("guests");
     const paramCategory = searchParams.get("category");
 
-    if (start && end) setDate({ from: new Date(start), to: new Date(end) });
+    if (start && end) {
+        // Kiểm tra tính hợp lệ của ngày tháng trước khi set state
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        if(!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+             setDate({ from: startDate, to: endDate });
+        }
+    }
     if (paramGuests) setGuests(paramGuests);
     if (paramCategory) setCategory(paramCategory);
   }, [searchParams]);
 
   /* ================= SEARCH ================= */
   const onSearch = () => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams.toString()); // Bắt đầu từ params hiện tại để giữ lại các filter khác nếu có
+
     if (date?.from) params.set("startDate", date.from.toISOString());
+    else params.delete("startDate");
+
     if (date?.to) params.set("endDate", date.to.toISOString());
+    else params.delete("endDate");
+
     if (guests) params.set("guests", guests);
+    else params.delete("guests");
+
     if (category && category !== "all") params.set("category", category);
+    else params.delete("category");
+
     router.push(`/search?${params.toString()}`);
   };
 
@@ -109,7 +125,7 @@ export const SearchFilters = ({
         <FieldWrapper>
           <Select value={category} onValueChange={setCategory}>
             <SelectTrigger
-              className={cn(triggerClass, "hover:border-blue-400")}
+              className={cn(triggerClass, "hover:border-blue-400 focus:ring-blue-100")}
             >
               <div className={cn(iconBoxClass, "bg-blue-100 text-blue-600")}>
                 <BedDouble className="h-6 w-6" />
@@ -143,7 +159,7 @@ export const SearchFilters = ({
                 variant="outline"
                 className={cn(
                   triggerClass,
-                  "hover:border-rose-400 focus:ring-rose-100"
+                  "hover:border-rose-400 focus:ring-rose-100 justify-start" // Thêm justify-start để căn trái nội dung button
                 )}
               >
                 <div
@@ -198,7 +214,7 @@ export const SearchFilters = ({
         <FieldWrapper>
           <Select value={guests} onValueChange={setGuests}>
             <SelectTrigger
-              className={cn(triggerClass, "hover:border-orange-400")}
+              className={cn(triggerClass, "hover:border-orange-400 focus:ring-orange-100")}
             >
               <div
                 className={cn(iconBoxClass, "bg-orange-100 text-orange-600")}

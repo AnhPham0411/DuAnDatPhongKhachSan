@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react"; // 1. Import useSession
+import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -14,7 +14,8 @@ import {
   Settings,
   Star,
   MapPin,
-  ListOrdered
+  ListOrdered,
+  TicketPercent // 1. Import icon mới cho Voucher
 } from "lucide-react";
 
 const routes = [
@@ -23,7 +24,7 @@ const routes = [
     icon: LayoutDashboard,
     href: "/admin",
     color: "text-sky-500",
-    roles: ["ADMIN", "STAFF"], // 2. Thêm quyền được phép xem
+    roles: ["ADMIN", "STAFF"],
   },
   {
     label: "Lịch biểu",
@@ -39,6 +40,14 @@ const routes = [
     color: "text-green-700",
     roles: ["ADMIN", "STAFF"],
   },
+  // 2. Thêm mục Mã giảm giá (Voucher) vào đây
+  {
+    label: "Mã giảm giá",
+    icon: TicketPercent,
+    href: "/admin/voucher",
+    color: "text-emerald-500", // Màu xanh ngọc biểu thị tiền bạc/khuyến mãi
+    roles: ["ADMIN", "STAFF"], // Staff cần xem để biết mã nào đang chạy
+  },
   {
     label: "Quản lý Phòng",
     icon: DoorOpen,
@@ -51,14 +60,14 @@ const routes = [
     icon: BedDouble,
     href: "/admin/categories",
     color: "text-pink-700",
-    roles: ["ADMIN"], // Chỉ Admin mới được cấu hình loại phòng
+    roles: ["ADMIN"],
   },
   {
     label: "Chi nhánh",
     icon: MapPin,
     href: "/admin/locations",
     color: "text-orange-700",
-    roles: ["ADMIN"], // Chỉ Admin mới được cấu hình chi nhánh
+    roles: ["ADMIN"],
   },
   {
     label: "Tiện nghi",
@@ -72,7 +81,7 @@ const routes = [
     icon: Users,
     href: "/admin/users",
     color: "text-blue-700",
-    roles: ["ADMIN"], // Chỉ Admin mới quản lý nhân sự
+    roles: ["ADMIN"],
   },
   {
     label: "Đánh giá",
@@ -92,10 +101,10 @@ const routes = [
 
 export const AdminSidebar = () => {
   const pathname = usePathname();
-  const { data: session } = useSession(); // 3. Lấy dữ liệu session
+  const { data: session } = useSession();
   const userRole = session?.user?.role;
 
-  // 4. Lọc các route dựa trên role của user
+  // Lọc route dựa trên role
   const filteredRoutes = routes.filter((route) => 
     userRole ? route.roles.includes(userRole) : false
   );
@@ -105,7 +114,7 @@ export const AdminSidebar = () => {
       <div className="px-3 py-2 flex-1">
         <Link href="/admin" className="flex items-center pl-3 mb-10">
           <div className="relative w-8 h-8 mr-4">
-             {/* Bạn có thể đặt Logo ở đây */}
+             {/* Logo placeholder */}
           </div>
           <h1 className="text-xl font-bold text-white tracking-tight">
             Hotel Manager
@@ -132,7 +141,6 @@ export const AdminSidebar = () => {
         </div>
       </div>
       
-      {/* 5. Tùy chọn: Hiển thị thông tin User ở dưới cùng Sidebar */}
       <div className="px-6 py-4 border-t border-slate-800">
         <div className="flex flex-col gap-y-1">
           <p className="text-xs text-zinc-500 uppercase font-bold tracking-wider">Tài khoản</p>

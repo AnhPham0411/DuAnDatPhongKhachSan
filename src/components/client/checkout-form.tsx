@@ -1,22 +1,23 @@
-
 "use client";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createBooking } from "@/actions/client/booking"; // Import file bạn vừa gửi
+import { createBooking } from "@/actions/client/booking";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner"; // Hiển thị thông báo
-import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Loader2, Receipt } from "lucide-react";
+import { VoucherApply } from "@/components/client/voucher-apply"; // Import Voucher Component
+import { formatCurrency } from "@/lib/utils"; // Hàm format tiền (VD: 100.000 đ)
 
 interface CheckoutFormProps {
   userId: string;
   roomId: string;
-  checkIn: string; // Truyền xuống dạng string ISO
+  checkIn: string;
   checkOut: string;
-  totalPrice: number;
+  totalPrice: number; // Đây là giá gốc
   initialName: string;
   initialEmail: string;
   initialPhone: string;
@@ -27,7 +28,7 @@ export const CheckoutForm = ({
   roomId,
   checkIn,
   checkOut,
-  totalPrice,
+  totalPrice, // Giá gốc
   initialName,
   initialEmail,
   initialPhone,
@@ -35,7 +36,14 @@ export const CheckoutForm = ({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  // State cho các input
+  // --- 1. STATE QUẢN LÝ VOUCHER ---
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [appliedVoucherId, setAppliedVoucherId] = useState<string | null>(null);
+
+  // Tính thành tiền (Không cho phép âm)
+  const finalPrice = Math.max(0, totalPrice - discountAmount);
+
+  // State cho form input
   const [formData, setFormData] = useState({
     guestName: initialName || "",
     guestEmail: initialEmail || "",
@@ -44,8 +52,9 @@ export const CheckoutForm = ({
   });
 
   const onSubmit = () => {
+    // Validate cơ bản
     if (!formData.guestName || !formData.guestPhone || !formData.guestEmail) {
-      toast.error("Vui lòng điền đầy đủ thông tin!");
+      toast.error("Vui lòng điền đầy đủ thông tin khách hàng!");
       return;
     }
 
@@ -54,9 +63,13 @@ export const CheckoutForm = ({
       const result = await createBooking({
         roomId,
         userId,
-        checkIn: new Date(checkIn), // Convert string sang Date object cho Zod
-        checkOut: new Date(checkOut), // Convert string sang Date object cho Zod
-        totalPrice,
+        checkIn: new Date(checkIn),
+        checkOut: new Date(checkOut),
+        
+        // --- 2. GỬI GIÁ ĐÃ GIẢM & VOUCHER ID ---
+        totalPrice: finalPrice, 
+        voucherId: appliedVoucherId, // Gửi kèm voucherId (nếu có)
+        
         guestName: formData.guestName,
         guestEmail: formData.guestEmail,
         guestPhone: formData.guestPhone,
@@ -66,64 +79,112 @@ export const CheckoutForm = ({
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success(result.success);
-        // Chuyển hướng về trang quản lý đơn
-        router.push("/my-bookings");
+        toast.success("Đặt phòng thành công!");
+        // Chuyển hướng về trang chi tiết đơn hàng (hoặc trang success)
+        router.push(`/my-bookings`); 
       }
     });
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* --- PHẦN 1: FORM THÔNG TIN --- */}
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Họ và tên</Label>
+            <Input 
+              value={formData.guestName}
+              onChange={(e) => setFormData({...formData, guestName: e.target.value})}
+              placeholder="Nguyễn Văn A"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Số điện thoại</Label>
+            <Input 
+              value={formData.guestPhone}
+              onChange={(e) => setFormData({...formData, guestPhone: e.target.value})}
+              placeholder="098..."
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Email nhận xác nhận</Label>
+          <Input 
+            type="email"
+            value={formData.guestEmail}
+            onChange={(e) => setFormData({...formData, guestEmail: e.target.value})}
+            placeholder="email@example.com"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Ghi chú đặc biệt</Label>
+          <Textarea 
+            value={formData.note}
+            onChange={(e) => setFormData({...formData, note: e.target.value})}
+            placeholder="Ví dụ: Tôi muốn check-in sớm, phòng tầng cao..." 
+          />
+        </div>
+      </div>
+
+      <div className="border-t border-slate-200 my-4"></div>
+
+      {/* --- PHẦN 2: MÃ GIẢM GIÁ (VOUCHER) --- */}
       <div className="space-y-2">
-        <Label>Họ và tên người nhận phòng</Label>
-        <Input 
-          value={formData.guestName}
-          onChange={(e) => setFormData({...formData, guestName: e.target.value})}
-          placeholder="Nguyễn Văn A"
+        <Label>Mã ưu đãi</Label>
+        <VoucherApply 
+          totalPrice={totalPrice} 
+          onApply={(discount, id) => {
+            setDiscountAmount(discount);
+            setAppliedVoucherId(id);
+          }} 
         />
       </div>
 
-      <div className="space-y-2">
-        <Label>Email liên hệ</Label>
-        <Input 
-          type="email"
-          value={formData.guestEmail}
-          onChange={(e) => setFormData({...formData, guestEmail: e.target.value})}
-          placeholder="email@example.com"
-        />
+      {/* --- PHẦN 3: TỔNG KẾT TIỀN --- */}
+      <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+        <div className="flex justify-between text-sm text-slate-600">
+          <span>Giá gốc:</span>
+          <span>{formatCurrency(totalPrice)}</span>
+        </div>
+        
+        {/* Chỉ hiện dòng giảm giá nếu có voucher áp dụng */}
+        {discountAmount > 0 && (
+          <div className="flex justify-between text-sm text-emerald-600 font-medium">
+            <span>Voucher giảm giá:</span>
+            <span>- {formatCurrency(discountAmount)}</span>
+          </div>
+        )}
+
+        <div className="flex justify-between items-center pt-3 border-t border-slate-300">
+          <span className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <Receipt className="w-4 h-4" /> Thành tiền:
+          </span>
+          <span className="text-xl font-bold text-blue-600">
+            {formatCurrency(finalPrice)}
+          </span>
+        </div>
       </div>
 
-      <div className="space-y-2">
-        <Label>Số điện thoại</Label>
-        <Input 
-          value={formData.guestPhone}
-          onChange={(e) => setFormData({...formData, guestPhone: e.target.value})}
-          placeholder="0987..."
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label>Ghi chú (Tùy chọn)</Label>
-        <Textarea 
-          value={formData.note}
-          onChange={(e) => setFormData({...formData, note: e.target.value})}
-          placeholder="Ví dụ: Tôi muốn check-in sớm..." 
-        />
-      </div>
-
-      <div className="pt-4">
+      {/* --- BUTTON SUBMIT --- */}
+      <div className="pt-2">
         <Button 
           onClick={onSubmit} 
           disabled={isPending} 
-          className="w-full text-lg" 
-          size="lg"
+          className="w-full text-lg h-12 bg-blue-600 hover:bg-blue-700 shadow-md" 
         >
-          {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          Xác nhận đặt phòng
+          {isPending ? (
+            <>
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Đang xử lý...
+            </>
+          ) : (
+            `Thanh toán ${formatCurrency(finalPrice)}`
+          )}
         </Button>
-        <p className="text-xs text-center text-muted-foreground mt-2">
-          Bằng việc xác nhận, bạn đồng ý với chính sách hủy phòng của chúng tôi.
+        <p className="text-xs text-center text-muted-foreground mt-3">
+          Bằng việc tiếp tục, bạn đồng ý với Điều khoản sử dụng & Chính sách quyền riêng tư của chúng tôi.
         </p>
       </div>
     </div>

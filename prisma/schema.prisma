@@ -138,19 +138,23 @@ model Amenity {
 
 // [MỚI] Model Voucher (Mã giảm giá) - Chức năng 3
 model Voucher {
-  id             String       @id @default(cuid())
-  code           String       @unique // Mã code (VD: SUMMER2025)
-  discountType   DiscountType // Loại giảm: % hay Tiền mặt
-  discountValue  Decimal      @db.Decimal(10, 2) // Giá trị giảm
-  minOrderValue  Decimal?     @db.Decimal(10, 2) // Đơn tối thiểu để áp dụng
-  maxDiscount    Decimal?     @db.Decimal(10, 2) // Giảm tối đa bao nhiêu (cho loại %)
-  startDate      DateTime     // Ngày bắt đầu
-  endDate        DateTime     // Ngày kết thúc
-  usageLimit     Int?         // Giới hạn số lần dùng toàn hệ thống
-  usedCount      Int          @default(0) // Số lần đã dùng
-  isActive       Boolean      @default(true)
+  id            String       @id @default(cuid())
+  code          String       @unique 
+  discountType  DiscountType 
+  discountValue Decimal      @db.Decimal(10, 2) 
+  minOrderValue Decimal?     @db.Decimal(10, 2) 
+  maxDiscount   Decimal?     @db.Decimal(10, 2) 
+  startDate     DateTime     
+  endDate       DateTime     
+  usageLimit    Int?         
+  usedCount     Int          @default(0) 
+  isActive      Boolean      @default(true)
   
-  bookings       Booking[]    // Các đơn đã dùng mã này
+  // 👇 THÊM 2 DÒNG NÀY 👇
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  bookings      Booking[]    
 }
 
 model Booking {

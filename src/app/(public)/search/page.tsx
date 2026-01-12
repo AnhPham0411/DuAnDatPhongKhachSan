@@ -3,51 +3,41 @@ import Link from "next/link";
 import { getRooms } from "@/actions/client/get-rooms";
 import { RoomCard } from "@/components/client/room-card";
 import { SearchFilters } from "@/components/client/search-filters";
-// import { SearchSorter } from "@/components/client/search-sorter"; // Uncomment when you have this component
+import { SearchSorter } from "@/components/client/search-sorter"; // 👈 Đảm bảo đường dẫn đúng nơi bạn lưu file
 import { Button } from "@/components/ui/button";
-import { auth } from "@/lib/auth"; // 👈 Import Auth
+import { auth } from "@/lib/auth";
 import { 
   SearchX, 
   Home, 
-  ChevronRight, 
-  ArrowUpDown
+  ChevronRight
 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"; // Using Shadcn Select for now if SearchSorter doesn't exist
 
-// Định nghĩa kiểu props chuẩn cho Next.js 15+
+// Định nghĩa kiểu props cho Next.js 15
 interface SearchPageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function SearchPage(props: SearchPageProps) {
-  // 1. Await searchParams
+  // 1. Await searchParams (Bắt buộc trong Next.js 15)
   const params = await props.searchParams;
   
-  // 2. Lấy session user (Quan trọng cho Wishlist)
+  // 2. Lấy session user (để kiểm tra trạng thái Wishlist trong RoomCard)
   const session = await auth();
 
-  // Parse params an toàn
+  // 3. Parse các tham số từ URL
   const category = typeof params.category === 'string' ? params.category : undefined;
   const guests = typeof params.guests === 'string' ? parseInt(params.guests) : undefined;
   const startDate = typeof params.startDate === 'string' ? params.startDate : undefined;
   const endDate = typeof params.endDate === 'string' ? params.endDate : undefined;
-  
-  // Lấy tham số sort từ URL
-  // const sort = typeof params.sort === 'string' ? params.sort : undefined;
+  const sort = typeof params.sort === 'string' ? params.sort : undefined;
 
-  // 3. Lấy dữ liệu
+  // 4. Gọi Server Action để lấy dữ liệu phòng
   const rooms = await getRooms({
     category,
     guests,
     startDate,
     endDate,
-    // sort, // Uncomment when getRooms supports sorting
+    sort, // Truyền tham số sort xuống DB
   });
 
   return (
@@ -69,10 +59,10 @@ export default async function SearchPage(props: SearchPageProps) {
         </div>
       </div>
 
-      {/* --- SEARCH BAR SECTION --- */}
+      {/* --- STICKY SEARCH BAR --- */}
       <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b shadow-sm">
          <div className="container mx-auto px-4 py-4">
-            {/* SearchFilters displayed horizontally */}
+            {/* Thanh filter nằm ngang */}
             <SearchFilters className="flex-row gap-4 shadow-sm border border-slate-200 p-2 rounded-xl bg-white" />
          </div>
       </div>
@@ -80,7 +70,7 @@ export default async function SearchPage(props: SearchPageProps) {
       {/* --- MAIN CONTENT --- */}
       <div className="container mx-auto px-4 py-8">
          <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
-            {/* Result Count */}
+            {/* Hiển thị số lượng kết quả */}
             <div>
                 <p className="text-slate-600">
                     Tìm thấy <span className="font-bold text-slate-900">{rooms.length}</span> phòng phù hợp
@@ -88,24 +78,13 @@ export default async function SearchPage(props: SearchPageProps) {
                 </p>
             </div>
 
-            {/* Sort Options - Temporary Implementation using generic Select */}
-            <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-500 hidden sm:inline">Sắp xếp theo:</span>
-                <Select defaultValue="newest">
-                  <SelectTrigger className="w-[180px] h-10 bg-white">
-                    <SelectValue placeholder="Mới nhất" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="newest">Mới nhất</SelectItem>
-                    <SelectItem value="price_asc">Giá: Thấp đến Cao</SelectItem>
-                    <SelectItem value="price_desc">Giá: Cao đến Thấp</SelectItem>
-                    <SelectItem value="rating_desc">Đánh giá cao nhất</SelectItem>
-                  </SelectContent>
-                </Select>
-            </div>
+            {/* Component Sắp xếp (Bọc Suspense để tránh lỗi hydration) */}
+            <Suspense fallback={<div className="w-[180px] h-10 bg-slate-100 rounded animate-pulse" />}>
+                <SearchSorter />
+            </Suspense>
          </div>
 
-         {/* --- RESULTS GRID --- */}
+         {/* --- DANH SÁCH KẾT QUẢ --- */}
          <Suspense fallback={<SearchSkeleton />}>
             {rooms.length === 0 ? (
                 <EmptyState />
@@ -115,7 +94,7 @@ export default async function SearchPage(props: SearchPageProps) {
                         <RoomCard 
                             key={room.id} 
                             room={room} 
-                            currentUser={session?.user} // 👈 QUAN TRỌNG: Truyền user vào RoomCard
+                            currentUser={session?.user} // Truyền user để hiện trái tim đỏ nếu đã like
                         />
                     ))}
                 </div>
@@ -126,7 +105,9 @@ export default async function SearchPage(props: SearchPageProps) {
   );
 }
 
-// Component hiển thị khi không tìm thấy kết quả
+// --- SUB-COMPONENTS ---
+
+// 1. Giao diện khi không tìm thấy phòng
 function EmptyState() {
     return (
         <div className="flex flex-col items-center justify-center py-16 bg-white rounded-2xl border border-dashed border-slate-300 text-center px-4">
@@ -146,7 +127,7 @@ function EmptyState() {
     );
 }
 
-// Component Skeleton Loading
+// 2. Giao diện Loading (Skeleton)
 function SearchSkeleton() {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
